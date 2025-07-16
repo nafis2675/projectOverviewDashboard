@@ -1,0 +1,177 @@
+{
+  "projects": [
+    {
+      "id": 1,
+      "name": "E-commerce Platform",
+      "manager": "John Smith",
+      "deadline": "2026-03-15",
+      "progress": 75,
+      "status": "active",
+      "teams": [1, 2],
+      "parts": [
+        {
+          "id": 1,
+          "name": "Frontend",
+          "weight": 40,
+          "progress": 80,
+          "todos": [
+            { "id": 1, "text": "Design system implementation", "completed": true },
+            { "id": 2, "text": "User authentication", "completed": true },
+            { "id": 3, "text": "Shopping cart functionality", "completed": false },
+            { "id": 4, "text": "Payment integration", "completed": false }
+          ]
+        },
+        {
+          "id": 2,
+          "name": "Backend",
+          "weight": 35,
+          "progress": 70,
+          "todos": [
+            { "id": 5, "text": "API development", "completed": true },
+            { "id": 6, "text": "Database design", "completed": true },
+            { "id": 7, "text": "Security implementation", "completed": false }
+          ]
+        },
+        {
+          "id": 3,
+          "name": "Mobile App",
+          "weight": 25,
+          "progress": 60,
+          "todos": [
+            { "id": 8, "text": "UI/UX design", "completed": true },
+            { "id": 9, "text": "Core functionality", "completed": false },
+            { "id": 10, "text": "Testing and optimization", "completed": false }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "CRM System",
+      "manager": "Sarah Johnson",
+      "deadline": "2026-04-20",
+      "progress": 45,
+      "status": "active",
+      "teams": [3],
+      "parts": [
+        {
+          "id": 4,
+          "name": "Core CRM",
+          "weight": 50,
+          "progress": 50,
+          "todos": [
+            { "id": 11, "text": "Customer database", "completed": true },
+            { "id": 12, "text": "Lead management", "completed": false },
+            { "id": 13, "text": "Reporting system", "completed": false }
+          ]
+        },
+        {
+          "id": 5,
+          "name": "Analytics",
+          "weight": 30,
+          "progress": 30,
+          "todos": [
+            { "id": 14, "text": "Data visualization", "completed": false },
+            { "id": 15, "text": "Performance metrics", "completed": false }
+          ]
+        },
+        {
+          "id": 6,
+          "name": "Integration",
+          "weight": 20,
+          "progress": 20,
+          "todos": [
+            { "id": 16, "text": "Third-party APIs", "completed": false }
+          ]
+        }
+      ]
+    }
+  ],
+  "teams": [
+    {
+      "id": 1,
+      "name": "Frontend Team",
+      "lead": "Mike Chen",
+      "members": [1, 2, 3],
+      "projectId": 1,
+      "progress": 80,
+      "deadline": "2026-03-15"
+    },
+    {
+      "id": 2,
+      "name": "Backend Team",
+      "lead": "Lisa Wang",
+      "members": [4, 5],
+      "projectId": 1,
+      "progress": 70,
+      "deadline": "2026-11-15"
+    },
+    {
+      "id": 3,
+      "name": "CRM Team",
+      "lead": "David Kim",
+      "members": [6, 7, 8],
+      "projectId": 2,
+      "progress": 45,
+      "deadline": "2026-04-20"
+    }
+  ],
+  "members": [
+    {
+      "id": 1,
+      "name": "Alice Johnson",
+      "role": "member",
+      "teamId": 1,
+      "tasks": [1, 2]
+    },
+    {
+      "id": 2,
+      "name": "Bob Smith",
+      "role": "member",
+      "teamId": 1,
+      "tasks": [3]
+    },
+    {
+      "id": 3,
+      "name": "Carol Davis",
+      "role": "member",
+      "teamId": 1,
+      "tasks": [4]
+    },
+    {
+      "id": 4,
+      "name": "Mike Chen",
+      "role": "teamLead",
+      "teamId": 1,
+      "tasks": [5, 6]
+    },
+    {
+      "id": 5,
+      "name": "Eva Wilson",
+      "role": "member",
+      "teamId": 2,
+      "tasks": [7]
+    },
+    {
+      "id": 6,
+      "name": "Frank Brown",
+      "role": "member",
+      "teamId": 3,
+      "tasks": [11, 12]
+    },
+    {
+      "id": 7,
+      "name": "Grace Lee",
+      "role": "member",
+      "teamId": 3,
+      "tasks": [13]
+    },
+    {
+      "id": 8,
+      "name": "Henry Taylor",
+      "role": "member",
+      "teamId": 3,
+      "tasks": [14, 15]
+    }
+  ]
+} 
