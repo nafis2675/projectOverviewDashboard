@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { 
   ArrowLeft, 
   Calendar, 
@@ -13,16 +13,27 @@ import {
   Edit,
   Trash2,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  X
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
+import LoadingSpinner from '../components/LoadingSpinner'
 
 const ProjectDetail = () => {
   const { id } = useParams()
   const { t } = useTranslation()
-  const { projects, teams, role } = useApp()
+  const { projects, teams, members, role, addProjectPart, addNotification } = useApp()
   const [selectedTeam, setSelectedTeam] = useState('')
   const [expandedParts, setExpandedParts] = useState(new Set())
+  const [showAddPartModal, setShowAddPartModal] = useState(false)
+  const [isCreating, setIsCreating] = useState(false)
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    weight: '',
+    progress: 0
+  })
+  const [formErrors, setFormErrors] = useState({})
 
   const project = projects.find(p => p.id === parseInt(id))
   
@@ -42,6 +53,20 @@ const ProjectDetail = () => {
   const projectTeams = teams.filter(team => project.teams.includes(team.id))
   const daysUntilDeadline = Math.ceil((new Date(project.deadline) - new Date()) / (1000 * 60 * 60 * 24))
 
+  // Get selected team details
+  const selectedTeamData = selectedTeam ? teams.find(team => team.id === parseInt(selectedTeam)) : null
+  const selectedTeamMembers = selectedTeamData ? members.filter(member => member.teamId === selectedTeamData.id) : []
+  
+  // Get team-specific tasks/parts
+  const getTeamTasks = (teamData) => {
+    if (!teamData) return []
+    const teamMembers = members.filter(member => member.teamId === teamData.id)
+    const teamTaskIds = teamMembers.flatMap(member => member.tasks || [])
+    return project.parts.filter(part => 
+      part.todos.some(todo => teamTaskIds.includes(todo.id))
+    )
+  }
+
   // Clamp progress for project and parts
   const clamp = (val) => Math.max(0, Math.min(100, val))
 
@@ -53,6 +78,90 @@ const ProjectDetail = () => {
       newExpanded.add(partId)
     }
     setExpandedParts(newExpanded)
+  }
+
+  const handleFormChange = (e) => {
+    const { name, value } = e.target
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }))
+    // Clear errors when user starts typing
+    if (formErrors[name]) {
+      setFormErrors(prev => ({
+        ...prev,
+        [name]: ''
+      }))
+    }
+  }
+
+  const validateForm = () => {
+    const errors = {}
+    
+    if (!formData.name.trim()) {
+      errors.name = t('projects.requiredField')
+    }
+    
+    if (!formData.weight.trim()) {
+      errors.weight = t('projects.weightRequired')
+    } else {
+      const weight = parseFloat(formData.weight)
+      if (isNaN(weight) || weight < 1 || weight > 100) {
+        errors.weight = t('projects.weightInvalid')
+      }
+    }
+    
+    return errors
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    const errors = validateForm()
+    
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors)
+      return
+    }
+
+    setIsCreating(true)
+    
+    try {
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      const newPart = {
+        id: Date.now(),
+        name: formData.name,
+        description: formData.description,
+        weight: parseFloat(formData.weight),
+        progress: parseFloat(formData.progress),
+        todos: []
+      }
+      
+      addProjectPart(project.id, newPart)
+      addNotification({
+        type: 'success',
+        message: t('projects.partCreated')
+      })
+      
+      // Reset form
+      setFormData({
+        name: '',
+        description: '',
+        weight: '',
+        progress: 0
+      })
+      setFormErrors({})
+      setShowAddPartModal(false)
+      
+    } catch (error) {
+      addNotification({
+        type: 'error',
+        message: 'Failed to create part'
+      })
+    } finally {
+      setIsCreating(false)
+    }
   }
 
   const containerVariants = {
@@ -208,15 +317,88 @@ const ProjectDetail = () => {
                 </option>
               ))}
             </select>
-            {selectedTeam && (
-              <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Team selected: {projectTeams.find(t => t.id === parseInt(selectedTeam))?.name}
-                </p>
-              </div>
-            )}
           </div>
         </motion.div>
+
+        {/* Team Information Section */}
+        {selectedTeamData && (
+          <motion.div variants={itemVariants} className="card">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              {t('projects.teamInfo')} - {selectedTeamData.name}
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Team Members */}
+              <div>
+                <h4 className="font-medium text-gray-900 dark:text-white mb-3">
+                  {t('projects.teamMembers')}
+                </h4>
+                <div className="space-y-2">
+                  {selectedTeamMembers.map(member => (
+                    <div key={member.id} className="flex items-center space-x-3 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                      <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-purple-600 rounded-full flex items-center justify-center">
+                        <span className="text-white text-sm font-medium">
+                          {member.name.split(' ').map(n => n[0]).join('')}
+                        </span>
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900 dark:text-white">{member.name}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 capitalize">{member.role}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Team Progress */}
+              <div>
+                <h4 className="font-medium text-gray-900 dark:text-white mb-3">
+                  {t('projects.teamProgress')}
+                </h4>
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Team Progress
+                      </span>
+                      <span className="text-lg font-bold text-gray-900 dark:text-white">
+                        {clamp(selectedTeamData.progress)}%
+                      </span>
+                    </div>
+                    <div className="progress-bar">
+                      <div 
+                        className="progress-fill"
+                        style={{ width: `${clamp(selectedTeamData.progress)}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Team Lead: <span className="font-medium text-gray-900 dark:text-white">{selectedTeamData.lead}</span>
+                    </p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Members: <span className="font-medium text-gray-900 dark:text-white">{selectedTeamMembers.length}</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Show message when no team is selected */}
+        {!selectedTeamData && (
+          <motion.div variants={itemVariants} className="card text-center">
+            <div className="py-8">
+              <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                {t('projects.noTeamSelected')}
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400">
+                {t('projects.selectTeamToView')}
+              </p>
+            </div>
+          </motion.div>
+        )}
 
         {/* Timeline */}
         <motion.div variants={itemVariants} className="card">
@@ -273,7 +455,10 @@ const ProjectDetail = () => {
               {t('projects.parts')}
             </h3>
             {(role === 'manager' || role === 'teamLead') && (
-              <button className="btn-primary flex items-center space-x-2">
+              <button 
+                onClick={() => setShowAddPartModal(true)}
+                className="btn-primary flex items-center space-x-2"
+              >
                 <Plus className="w-4 h-4" />
                 <span>{t('projects.addPart')}</span>
               </button>
@@ -358,6 +543,137 @@ const ProjectDetail = () => {
           </div>
         </motion.div>
       </motion.div>
+
+      {/* Add Part Modal */}
+      <AnimatePresence>
+        {showAddPartModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4"
+            >
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  {t('projects.createPartTitle')}
+                </h3>
+                <button
+                  onClick={() => setShowAddPartModal(false)}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    {t('projects.partName')}
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleFormChange}
+                    className={`w-full p-3 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors ${
+                      formErrors.name ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                    }`}
+                    placeholder="Enter part name"
+                  />
+                  {formErrors.name && (
+                    <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                      {formErrors.name}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    {t('projects.partDescription')}
+                  </label>
+                  <textarea
+                    name="description"
+                    value={formData.description}
+                    onChange={handleFormChange}
+                    rows={3}
+                    className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
+                    placeholder="Enter part description (optional)"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    {t('projects.partWeight')}
+                  </label>
+                  <input
+                    type="number"
+                    name="weight"
+                    value={formData.weight}
+                    onChange={handleFormChange}
+                    min="1"
+                    max="100"
+                    className={`w-full p-3 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors ${
+                      formErrors.weight ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                    }`}
+                    placeholder="Enter weight (1-100)"
+                  />
+                  {formErrors.weight && (
+                    <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                      {formErrors.weight}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    {t('projects.partProgress')}
+                  </label>
+                  <input
+                    type="number"
+                    name="progress"
+                    value={formData.progress}
+                    onChange={handleFormChange}
+                    min="0"
+                    max="100"
+                    className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
+                    placeholder="Enter initial progress (0-100)"
+                  />
+                </div>
+
+                <div className="flex space-x-4 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddPartModal(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    {t('common.cancel')}
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isCreating}
+                    className="flex-1 btn-primary flex items-center justify-center space-x-2"
+                  >
+                    {isCreating ? (
+                      <>
+                        <LoadingSpinner size="sm" />
+                        <span>{t('projects.creatingPart')}</span>
+                      </>
+                    ) : (
+                      <span>{t('projects.addPart')}</span>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

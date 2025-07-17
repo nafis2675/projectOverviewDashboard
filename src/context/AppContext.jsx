@@ -1,5 +1,12 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { 
+  projectsService, 
+  teamsService, 
+  usersService, 
+  projectPartsService,
+  subscriptions 
+} from '../services/supabase';
 
 const AppContext = createContext();
 
@@ -14,7 +21,9 @@ const initialState = {
   selectedTeam: null,
   selectedMember: null,
   loading: false,
-  notifications: []
+  notifications: [],
+  isConnected: false,
+  error: null
 };
 
 const appReducer = (state, action) => {
@@ -39,6 +48,10 @@ const appReducer = (state, action) => {
       return { ...state, selectedMember: action.payload };
     case 'SET_LOADING':
       return { ...state, loading: action.payload };
+    case 'SET_CONNECTED':
+      return { ...state, isConnected: action.payload };
+    case 'SET_ERROR':
+      return { ...state, error: action.payload };
     case 'ADD_NOTIFICATION':
       return { 
         ...state, 
@@ -62,6 +75,40 @@ const appReducer = (state, action) => {
       return { 
         ...state, 
         projects: state.projects.filter(p => p.id !== action.payload) 
+      };
+    case 'ADD_PROJECT_PART':
+      return {
+        ...state,
+        projects: state.projects.map(p => 
+          p.id === action.payload.projectId 
+            ? { ...p, parts: [...p.parts, action.payload.part] }
+            : p
+        )
+      };
+    case 'UPDATE_PROJECT_PART':
+      return {
+        ...state,
+        projects: state.projects.map(p => 
+          p.id === action.payload.projectId 
+            ? { 
+                ...p, 
+                parts: p.parts.map(part => 
+                  part.id === action.payload.partId 
+                    ? { ...part, ...action.payload.updates }
+                    : part
+                )
+              }
+            : p
+        )
+      };
+    case 'DELETE_PROJECT_PART':
+      return {
+        ...state,
+        projects: state.projects.map(p => 
+          p.id === action.payload.projectId 
+            ? { ...p, parts: p.parts.filter(part => part.id !== action.payload.partId) }
+            : p
+        )
       };
     case 'ADD_TEAM':
       return { ...state, teams: [...state.teams, action.payload] };
@@ -159,203 +206,276 @@ export const AppProvider = ({ children }) => {
     localStorage.setItem('role', state.role);
   }, [state.role]);
 
-  // Load mock data
+  // Load data from Supabase
   useEffect(() => {
-    const loadMockData = async () => {
+    const loadData = async () => {
       dispatch({ type: 'SET_LOADING', payload: true });
+      dispatch({ type: 'SET_ERROR', payload: null });
       
-      // Simulate API call
-      setTimeout(() => {
-        const mockProjects = [
-          {
-            id: 1,
-            name: 'E-commerce Platform',
-            manager: 'John Smith',
-            deadline: '2026-03-15',
-            progress: 75,
-            status: 'active',
-            teams: [1, 2],
-            parts: [
-              { id: 1, name: 'Frontend', weight: 40, progress: 80, todos: [
-                { id: 1, text: 'Design system implementation', completed: true },
-                { id: 2, text: 'User authentication', completed: true },
-                { id: 3, text: 'Shopping cart functionality', completed: false },
-                { id: 4, text: 'Payment integration', completed: false }
-              ]},
-              { id: 2, name: 'Backend', weight: 35, progress: 70, todos: [
-                { id: 5, text: 'API development', completed: true },
-                { id: 6, text: 'Database design', completed: true },
-                { id: 7, text: 'Security implementation', completed: false }
-              ]},
-              { id: 3, name: 'Mobile App', weight: 25, progress: 60, todos: [
-                { id: 8, text: 'UI/UX design', completed: true },
-                { id: 9, text: 'Core functionality', completed: false },
-                { id: 10, text: 'Testing and optimization', completed: false }
-              ]}
-            ],
-            activityLog: [
-              { date: '2026-07-14', message: 'Frontend part completed.' },
-              { date: '2026-07-13', message: 'Team assigned to project.' }
-            ]
-          },
-          {
-            id: 2,
-            name: 'CRM System',
-            manager: 'Sarah Johnson',
-            deadline: '2026-04-20',
-            progress: 45,
-            status: 'active',
-            teams: [3],
-            parts: [
-              { id: 4, name: 'Core CRM', weight: 50, progress: 50, todos: [
-                { id: 11, text: 'Customer database', completed: true },
-                { id: 12, text: 'Lead management', completed: false },
-                { id: 13, text: 'Reporting system', completed: false }
-              ]},
-              { id: 5, name: 'Analytics', weight: 30, progress: 30, todos: [
-                { id: 14, text: 'Data visualization', completed: false },
-                { id: 15, text: 'Performance metrics', completed: false }
-              ]},
-              { id: 6, name: 'Integration', weight: 20, progress: 20, todos: [
-                { id: 16, text: 'Third-party APIs', completed: false }
-              ]}
-            ]
-          }
-        ];
+      try {
+        // Load all data in parallel
+        const [projects, teams, users] = await Promise.all([
+          projectsService.getProjects(),
+          teamsService.getTeams(),
+          usersService.getUsers()
+        ]);
 
-        const mockTeams = [
-          {
-            id: 1,
-            name: 'Frontend Team',
-            lead: 'Mike Chen',
-            members: [1, 2, 3],
-            projectId: 1,
-            progress: 80,
-            deadline: '2026-03-15'
-          },
-          {
-            id: 2,
-            name: 'Backend Team',
-            lead: 'Lisa Wang',
-            members: [4, 5],
-            projectId: 1,
-            progress: 70,
-            deadline: '2026-03-15'
-          },
-          {
-            id: 3,
-            name: 'CRM Team',
-            lead: 'David Kim',
-            members: [6, 7, 8],
-            projectId: 2,
-            progress: 45,
-            deadline: '2026-04-20'
-          }
-        ];
+        // Transform users data to match expected structure
+        const transformedUsers = users.map(user => ({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          teamId: user.team_id,
+          tasks: user.tasks || [],
+          personalTodos: user.personal_todos || []
+        }));
 
-        const mockMembers = [
-          { 
-            id: 1, 
-            name: 'Alice Johnson', 
-            role: 'member', 
-            teamId: 1, 
-            tasks: [1, 2],
-            personalTodos: [
-              { id: 1, text: 'Review project documentation', completed: true },
-              { id: 2, text: 'Update personal skills profile', completed: false },
-              { id: 3, text: 'Schedule team meeting', completed: false }
-            ]
-          },
-          { 
-            id: 2, 
-            name: 'Bob Smith', 
-            role: 'member', 
-            teamId: 1, 
-            tasks: [3],
-            personalTodos: [
-              { id: 1, text: 'Complete training module', completed: true },
-              { id: 2, text: 'Prepare presentation', completed: false }
-            ]
-          },
-          { 
-            id: 3, 
-            name: 'Carol Davis', 
-            role: 'member', 
-            teamId: 1, 
-            tasks: [4],
-            personalTodos: [
-              { id: 1, text: 'Review code standards', completed: false },
-              { id: 2, text: 'Update documentation', completed: true }
-            ]
-          },
-          { 
-            id: 4, 
-            name: 'Mike Chen', 
-            role: 'teamLead', 
-            teamId: 1, 
-            tasks: [5, 6],
-            personalTodos: [
-              { id: 1, text: 'Team performance review', completed: false },
-              { id: 2, text: 'Budget planning', completed: false },
-              { id: 3, text: 'Client meeting preparation', completed: true }
-            ]
-          },
-          { 
-            id: 5, 
-            name: 'Eva Wilson', 
-            role: 'member', 
-            teamId: 2, 
-            tasks: [7],
-            personalTodos: [
-              { id: 1, text: 'Database optimization', completed: false },
-              { id: 2, text: 'Security audit', completed: true }
-            ]
-          },
-          { 
-            id: 6, 
-            name: 'Frank Brown', 
-            role: 'member', 
-            teamId: 3, 
-            tasks: [11, 12],
-            personalTodos: [
-              { id: 1, text: 'Customer feedback analysis', completed: false },
-              { id: 2, text: 'CRM system testing', completed: false }
-            ]
-          },
-          { 
-            id: 7, 
-            name: 'Grace Lee', 
-            role: 'member', 
-            teamId: 3, 
-            tasks: [13],
-            personalTodos: [
-              { id: 1, text: 'Report generation', completed: true },
-              { id: 2, text: 'Data validation', completed: false }
-            ]
-          },
-          { 
-            id: 8, 
-            name: 'Henry Taylor', 
-            role: 'member', 
-            teamId: 3, 
-            tasks: [14, 15],
-            personalTodos: [
-              { id: 1, text: 'Analytics dashboard', completed: false },
-              { id: 2, text: 'Performance metrics', completed: false },
-              { id: 3, text: 'User testing', completed: true }
-            ]
+        dispatch({ type: 'SET_PROJECTS', payload: projects });
+        dispatch({ type: 'SET_TEAMS', payload: teams });
+        dispatch({ type: 'SET_MEMBERS', payload: transformedUsers });
+        dispatch({ type: 'SET_CONNECTED', payload: true });
+        
+        console.log('✅ Data loaded successfully:', {
+          projects: projects.length,
+          teams: teams.length,
+          users: transformedUsers.length
+        });
+        
+      } catch (error) {
+        console.error('❌ Failed to load data:', error);
+        dispatch({ type: 'SET_ERROR', payload: error.message });
+        dispatch({ type: 'SET_CONNECTED', payload: false });
+        
+        // Show error notification
+        dispatch({ 
+          type: 'ADD_NOTIFICATION', 
+          payload: {
+            type: 'error',
+            message: 'Failed to load data from database. Please check your connection.'
           }
-        ];
-
-        dispatch({ type: 'SET_PROJECTS', payload: mockProjects });
-        dispatch({ type: 'SET_TEAMS', payload: mockTeams });
-        dispatch({ type: 'SET_MEMBERS', payload: mockMembers });
+        });
+      } finally {
         dispatch({ type: 'SET_LOADING', payload: false });
-      }, 1000);
+      }
     };
 
-    loadMockData();
+    loadData();
   }, []);
+
+  // Set up real-time subscriptions
+  useEffect(() => {
+    if (!state.isConnected) return;
+
+    const projectsSubscription = subscriptions.subscribeToProjects(async (payload) => {
+      console.log('🔄 Projects updated:', payload);
+      try {
+        const projects = await projectsService.getProjects();
+        dispatch({ type: 'SET_PROJECTS', payload: projects });
+      } catch (error) {
+        console.error('Failed to refresh projects:', error);
+      }
+    });
+
+    const teamsSubscription = subscriptions.subscribeToTeams(async (payload) => {
+      console.log('🔄 Teams updated:', payload);
+      try {
+        const teams = await teamsService.getTeams();
+        dispatch({ type: 'SET_TEAMS', payload: teams });
+      } catch (error) {
+        console.error('Failed to refresh teams:', error);
+      }
+    });
+
+    const usersSubscription = subscriptions.subscribeToUsers(async (payload) => {
+      console.log('🔄 Users updated:', payload);
+      try {
+        const users = await usersService.getUsers();
+        const transformedUsers = users.map(user => ({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          teamId: user.team_id,
+          tasks: user.tasks || [],
+          personalTodos: user.personal_todos || []
+        }));
+        dispatch({ type: 'SET_MEMBERS', payload: transformedUsers });
+      } catch (error) {
+        console.error('Failed to refresh users:', error);
+      }
+    });
+
+    // Cleanup subscriptions on unmount
+    return () => {
+      projectsSubscription.unsubscribe();
+      teamsSubscription.unsubscribe();
+      usersSubscription.unsubscribe();
+    };
+  }, [state.isConnected]);
+
+  // API methods using Supabase services
+  const addProject = async (projectData) => {
+    try {
+      dispatch({ type: 'SET_LOADING', payload: true });
+      
+      // Create project in database
+      const newProject = await projectsService.createProject({
+        name: projectData.name,
+        description: projectData.description,
+        managerId: projectData.managerId,
+        deadline: projectData.deadline
+      });
+
+      // Transform and add to state
+      const transformedProject = {
+        id: newProject.id,
+        name: newProject.name,
+        description: newProject.description,
+        manager: projectData.manager,
+        deadline: newProject.deadline,
+        progress: 0,
+        status: 'active',
+        teams: [],
+        parts: projectData.parts || [],
+        activityLog: []
+      };
+
+      dispatch({ type: 'ADD_PROJECT', payload: transformedProject });
+      
+      // Create default project parts if provided
+      if (projectData.parts && projectData.parts.length > 0) {
+        for (const part of projectData.parts) {
+          await projectPartsService.createProjectPart(newProject.id, part);
+        }
+      }
+
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: {
+          type: 'success',
+          message: 'Project created successfully!'
+        }
+      });
+
+    } catch (error) {
+      console.error('Failed to create project:', error);
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: {
+          type: 'error',
+          message: 'Failed to create project. Please try again.'
+        }
+      });
+    } finally {
+      dispatch({ type: 'SET_LOADING', payload: false });
+    }
+  };
+
+  const addProjectPart = async (projectId, partData) => {
+    try {
+      const newPart = await projectPartsService.createProjectPart(projectId, partData);
+      
+      const transformedPart = {
+        id: newPart.id,
+        name: newPart.name,
+        description: newPart.description,
+        weight: newPart.weight,
+        progress: newPart.progress,
+        todos: []
+      };
+
+      dispatch({ 
+        type: 'ADD_PROJECT_PART', 
+        payload: { projectId, part: transformedPart } 
+      });
+
+    } catch (error) {
+      console.error('Failed to create project part:', error);
+      throw error;
+    }
+  };
+
+  const addTeam = async (teamData) => {
+    try {
+      const newTeam = await teamsService.createTeam({
+        name: teamData.name,
+        leadId: teamData.leadId,
+        projectId: teamData.projectId,
+        deadline: teamData.deadline
+      });
+
+      const transformedTeam = {
+        id: newTeam.id,
+        name: newTeam.name,
+        lead: teamData.lead,
+        members: [],
+        projectId: newTeam.project_id,
+        progress: 0,
+        deadline: newTeam.deadline
+      };
+
+      dispatch({ type: 'ADD_TEAM', payload: transformedTeam });
+
+    } catch (error) {
+      console.error('Failed to create team:', error);
+      throw error;
+    }
+  };
+
+  const addMember = async (memberData) => {
+    try {
+      const newUser = await usersService.createUser({
+        name: memberData.name,
+        email: memberData.email,
+        role: memberData.role,
+        team_id: memberData.teamId
+      });
+
+      const transformedMember = {
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        role: newUser.role,
+        teamId: newUser.team_id,
+        tasks: [],
+        personalTodos: memberData.personalTodos || []
+      };
+
+      dispatch({ type: 'ADD_MEMBER', payload: transformedMember });
+
+    } catch (error) {
+      console.error('Failed to create member:', error);
+      throw error;
+    }
+  };
+
+  const updateMember = async (memberData) => {
+    try {
+      const updatedUser = await usersService.updateUser(memberData.id, {
+        name: memberData.name,
+        email: memberData.email,
+        role: memberData.role,
+        team_id: memberData.teamId
+      });
+
+      const transformedMember = {
+        id: updatedUser.id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        teamId: updatedUser.team_id,
+        tasks: memberData.tasks || [],
+        personalTodos: memberData.personalTodos || []
+      };
+
+      dispatch({ type: 'UPDATE_MEMBER', payload: transformedMember });
+
+    } catch (error) {
+      console.error('Failed to update member:', error);
+      throw error;
+    }
+  };
 
   const value = {
     ...state,
@@ -365,14 +485,23 @@ export const AppProvider = ({ children }) => {
     setRole: (role) => dispatch({ type: 'SET_ROLE', payload: role }),
     addNotification: (notification) => dispatch({ type: 'ADD_NOTIFICATION', payload: notification }),
     removeNotification: (id) => dispatch({ type: 'REMOVE_NOTIFICATION', payload: id }),
-    addProject: (project) => dispatch({ type: 'ADD_PROJECT', payload: project }),
+    addProject,
     updateProject: (project) => dispatch({ type: 'UPDATE_PROJECT', payload: project }),
     deleteProject: (id) => dispatch({ type: 'DELETE_PROJECT', payload: id }),
-    addTeam: (team) => dispatch({ type: 'ADD_TEAM', payload: team }),
+    addProjectPart,
+    updateProjectPart: (projectId, partId, updates) => dispatch({ 
+      type: 'UPDATE_PROJECT_PART', 
+      payload: { projectId, partId, updates } 
+    }),
+    deleteProjectPart: (projectId, partId) => dispatch({ 
+      type: 'DELETE_PROJECT_PART', 
+      payload: { projectId, partId } 
+    }),
+    addTeam,
     updateTeam: (team) => dispatch({ type: 'UPDATE_TEAM', payload: team }),
     deleteTeam: (id) => dispatch({ type: 'DELETE_TEAM', payload: id }),
-    addMember: (member) => dispatch({ type: 'ADD_MEMBER', payload: member }),
-    updateMember: (member) => dispatch({ type: 'UPDATE_MEMBER', payload: member }),
+    addMember,
+    updateMember,
     deleteMember: (id) => dispatch({ type: 'DELETE_MEMBER', payload: id }),
     addPersonalTodo: (memberId, todo) => dispatch({ 
       type: 'ADD_PERSONAL_TODO', 

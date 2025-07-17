@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { 
   ArrowLeft, 
   User, 
@@ -13,7 +13,9 @@ import {
   Edit,
   Trash2,
   Target,
-  X
+  X,
+  Save,
+  AlertCircle
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 
@@ -27,10 +29,20 @@ const MemberDetail = () => {
     role, 
     addPersonalTodo, 
     updatePersonalTodo, 
-    deletePersonalTodo 
+    deletePersonalTodo,
+    updateMember,
+    addNotification
   } = useApp()
   const [newTodo, setNewTodo] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [isUpdating, setIsUpdating] = useState(false)
+  const [formData, setFormData] = useState({
+    name: '',
+    role: '',
+    teamId: ''
+  })
+  const [formErrors, setFormErrors] = useState({})
 
   const member = members.find(m => m.id === parseInt(id))
   
@@ -50,6 +62,80 @@ const MemberDetail = () => {
   const memberTeam = teams.find(team => team.members.includes(member.id))
   const memberProject = memberTeam ? projects.find(p => p.id === memberTeam.projectId) : null
   const personalTodos = member.personalTodos || []
+
+  const openEditModal = () => {
+    setFormData({
+      name: member.name,
+      role: member.role,
+      teamId: member.teamId || ''
+    })
+    setFormErrors({})
+    setShowEditModal(true)
+  }
+
+  const validateForm = () => {
+    const errors = {}
+    
+    if (!formData.name.trim()) {
+      errors.name = t('members.requiredField')
+    }
+    
+    if (!formData.role) {
+      errors.role = t('members.requiredField')
+    }
+
+    setFormErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    
+    if (!validateForm()) {
+      return
+    }
+
+    setIsUpdating(true)
+
+    try {
+      // Update member with new data
+      const updatedMember = {
+        ...member,
+        name: formData.name.trim(),
+        role: formData.role,
+        teamId: parseInt(formData.teamId) || null
+      }
+
+      // Simulate API call delay
+      await new Promise(resolve => setTimeout(resolve, 1000))
+
+      updateMember(updatedMember)
+      
+      addNotification({
+        type: 'success',
+        title: t('notifications.success'),
+        message: t('notifications.memberUpdated')
+      })
+
+      setShowEditModal(false)
+    } catch (error) {
+      addNotification({
+        type: 'error',
+        title: t('notifications.error'),
+        message: 'Failed to update member. Please try again.'
+      })
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const handleInputChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+    // Clear error when user starts typing
+    if (formErrors[field]) {
+      setFormErrors(prev => ({ ...prev, [field]: '' }))
+    }
+  }
 
   const addTodo = () => {
     if (newTodo.trim()) {
@@ -92,6 +178,18 @@ const MemberDetail = () => {
     visible: { opacity: 1, y: 0 }
   }
 
+  const modalVariants = {
+    hidden: { opacity: 0, scale: 0.8 },
+    visible: { opacity: 1, scale: 1 },
+    exit: { opacity: 0, scale: 0.8 }
+  }
+
+  const roleOptions = [
+    { value: 'manager', label: t('role.manager') },
+    { value: 'teamLead', label: t('role.teamLead') },
+    { value: 'member', label: t('role.member') }
+  ]
+
   return (
     <div className="p-6">
       <motion.div
@@ -110,8 +208,8 @@ const MemberDetail = () => {
               <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
             </Link>
             <div className="flex items-center space-x-4">
-              <div className="w-16 h-16 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center">
-                <span className="text-2xl font-medium text-primary-700 dark:text-primary-300">
+              <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                <span className="text-2xl font-semibold text-white">
                   {member.name.charAt(0)}
                 </span>
               </div>
@@ -127,10 +225,15 @@ const MemberDetail = () => {
           </div>
           {(role === 'manager' || role === 'teamLead') && (
             <div className="flex items-center space-x-2">
-              <button className="btn-secondary flex items-center space-x-2">
+              <motion.button
+                onClick={openEditModal}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="btn-secondary flex items-center space-x-2"
+              >
                 <Edit className="w-4 h-4" />
                 <span>Edit</span>
-              </button>
+              </motion.button>
               <button className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors">
                 <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
               </button>
@@ -145,12 +248,14 @@ const MemberDetail = () => {
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
               Member Information
             </h3>
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div className="flex items-center space-x-3">
                 <User className="w-5 h-5 text-gray-400" />
                 <div>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Role</p>
-                  <p className="font-medium text-gray-900 dark:text-white">{member.role}</p>
+                  <p className="font-medium text-gray-900 dark:text-white">
+                    {t(`role.${member.role}`)}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center space-x-3">
@@ -162,54 +267,52 @@ const MemberDetail = () => {
                   </p>
                 </div>
               </div>
-              {memberProject && (
-                <div className="flex items-center space-x-3">
-                  <Target className="w-5 h-5 text-gray-400" />
-                  <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Project</p>
-                    <p className="font-medium text-gray-900 dark:text-white">{memberProject.name}</p>
-                  </div>
-                </div>
-              )}
               <div className="flex items-center space-x-3">
-                <CheckCircle className="w-5 h-5 text-gray-400" />
+                <Target className="w-5 h-5 text-gray-400" />
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Current Tasks</p>
-                  <p className="font-medium text-gray-900 dark:text-white">{member.tasks?.length || 0}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Project</p>
+                  <p className="font-medium text-gray-900 dark:text-white">
+                    {memberProject?.name || 'No project assigned'}
+                  </p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Progress Overview */}
+          {/* Performance Stats */}
           <div className="card">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              {t('members.progress')}
+              Performance Overview
             </h3>
             <div className="space-y-4">
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Personal Todo Completion
-                  </span>
-                  <span className="text-lg font-bold text-gray-900 dark:text-white">
-                    {personalTodos.length > 0 ? clamp((personalTodos.filter(t => t.completed).length / personalTodos.length) * 100) : 0}%
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Task Completion</span>
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">
+                    {member.tasks?.length || 0} tasks
                   </span>
                 </div>
-                <div className="progress-bar">
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                   <div 
-                    className="progress-fill"
-                    style={{ width: `${personalTodos.length > 0 ? clamp((personalTodos.filter(t => t.completed).length / personalTodos.length) * 100) : 0}%` }}
+                    className="bg-green-500 h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${clamp(Math.min((member.tasks?.length || 0) * 20, 100))}%` }}
                   />
                 </div>
               </div>
-              <div className="flex items-center space-x-3">
-                <Clock className="w-5 h-5 text-gray-400" />
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Active Todos</p>
-                  <p className="font-medium text-gray-900 dark:text-white">
-                    {personalTodos.filter(t => !t.completed).length} remaining
-                  </p>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Personal Todos</span>
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">
+                    {personalTodos.filter(todo => todo.completed).length}/{personalTodos.length}
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                  <div 
+                    className="bg-blue-500 h-2 rounded-full transition-all duration-500"
+                    style={{ 
+                      width: `${personalTodos.length > 0 ? (personalTodos.filter(todo => todo.completed).length / personalTodos.length) * 100 : 0}%` 
+                    }}
+                  />
                 </div>
               </div>
             </div>
@@ -247,7 +350,7 @@ const MemberDetail = () => {
                 <div key={taskId} className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                   <input
                     type="checkbox"
-                    className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
                   />
                   <span className="text-sm text-gray-700 dark:text-gray-300">
                     {taskText}
@@ -288,12 +391,12 @@ const MemberDetail = () => {
                   value={newTodo}
                   onChange={(e) => setNewTodo(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && addTodo()}
-                  className="flex-1 p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="flex-1 p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   autoFocus
                 />
                 <button
                   onClick={addTodo}
-                  className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
                 >
                   Add
                 </button>
@@ -311,34 +414,174 @@ const MemberDetail = () => {
           )}
 
           {/* Todo List */}
-          <div className="space-y-2">
+          <div className="space-y-3">
             {personalTodos.map((todo) => (
               <div key={todo.id} className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg group">
                 <input
                   type="checkbox"
                   checked={todo.completed}
                   onChange={() => toggleTodo(todo.id)}
-                  className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500 cursor-pointer"
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
                 />
-                <span className={`text-sm flex-1 ${todo.completed ? 'line-through text-gray-500' : 'text-gray-700 dark:text-gray-300'}`}>
+                <span className={`flex-1 text-sm ${
+                  todo.completed 
+                    ? 'line-through text-gray-500 dark:text-gray-400' 
+                    : 'text-gray-700 dark:text-gray-300'
+                }`}>
                   {todo.text}
                 </span>
                 <button
                   onClick={() => deleteTodo(todo.id)}
-                  className="p-1 rounded-lg bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors opacity-0 group-hover:opacity-100"
+                  className="opacity-0 group-hover:opacity-100 p-1 rounded text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all"
                 >
-                  <X className="w-4 h-4 text-red-600 dark:text-red-400" />
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
             ))}
             {personalTodos.length === 0 && (
-              <p className="text-gray-600 dark:text-gray-400 text-center py-8">
-                No personal todos yet. Click "Add Todo" to create your first one!
+              <p className="text-gray-600 dark:text-gray-400 text-center py-4">
+                No personal todos yet. Add one above!
               </p>
             )}
           </div>
         </motion.div>
       </motion.div>
+
+      {/* Edit Member Modal */}
+      <AnimatePresence>
+        {showEditModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+            onClick={(e) => e.target === e.currentTarget && setShowEditModal(false)}
+          >
+            <motion.div
+              variants={modalVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                  Edit Member: {member.name}
+                </h2>
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmit} className="p-6 space-y-6">
+                {/* Member Name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    {t('members.fullName')} *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => handleInputChange('name', e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white ${
+                      formErrors.name ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                    }`}
+                    placeholder="Enter member's full name"
+                  />
+                  {formErrors.name && (
+                    <div className="flex items-center mt-1 text-sm text-red-600">
+                      <AlertCircle className="w-4 h-4 mr-1" />
+                      {formErrors.name}
+                    </div>
+                  )}
+                </div>
+
+                {/* Member Role */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    {t('members.memberRole')} *
+                  </label>
+                  <select
+                    value={formData.role}
+                    onChange={(e) => handleInputChange('role', e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white ${
+                      formErrors.role ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                    }`}
+                  >
+                    <option value="">Select a role...</option>
+                    {roleOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  {formErrors.role && (
+                    <div className="flex items-center mt-1 text-sm text-red-600">
+                      <AlertCircle className="w-4 h-4 mr-1" />
+                      {formErrors.role}
+                    </div>
+                  )}
+                </div>
+
+                {/* Team Assignment */}
+                {teams.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      {t('members.selectTeam')} (Optional)
+                    </label>
+                    <select
+                      value={formData.teamId}
+                      onChange={(e) => handleInputChange('teamId', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    >
+                      <option value="">Select a team...</option>
+                      {teams.map((team) => (
+                        <option key={team.id} value={team.id}>
+                          {team.name} (Lead: {team.lead})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Form Actions */}
+                <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditModal(false)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                  >
+                    {t('common.cancel')}
+                  </button>
+                  <motion.button
+                    type="submit"
+                    disabled={isUpdating}
+                    whileHover={{ scale: isUpdating ? 1 : 1.05 }}
+                    whileTap={{ scale: isUpdating ? 1 : 0.95 }}
+                    className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 rounded-lg transition-colors flex items-center space-x-2"
+                  >
+                    {isUpdating ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>Updating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        <span>Save Changes</span>
+                      </>
+                    )}
+                  </motion.button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

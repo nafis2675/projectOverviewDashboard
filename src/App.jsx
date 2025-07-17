@@ -13,6 +13,7 @@ import Members from './pages/Members'
 import MemberDetail from './pages/MemberDetail'
 import NotificationContainer from './components/NotificationContainer'
 import LoadingSpinner from './components/LoadingSpinner'
+import DatabaseStatus from './components/DatabaseStatus'
 import { useApp } from './context/AppContext'
 
 function App() {
@@ -129,6 +130,7 @@ function App() {
         </div>
       </div>
       <NotificationContainer />
+      <DatabaseStatus />
     </div>
   )
 }
