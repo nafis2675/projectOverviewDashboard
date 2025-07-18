@@ -453,6 +453,54 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  const updateProject = async (projectData) => {
+    try {
+      const updatedProject = await projectsService.updateProject(projectData.id, {
+        name: projectData.name,
+        description: projectData.description,
+        manager_id: projectData.managerId,
+        deadline: projectData.deadline,
+        status: projectData.status,
+        progress: projectData.progress
+      });
+
+      const transformedProject = {
+        id: updatedProject.id,
+        name: updatedProject.name,
+        description: updatedProject.description,
+        manager: projectData.manager,
+        managerId: updatedProject.manager_id,
+        deadline: updatedProject.deadline,
+        progress: updatedProject.progress,
+        status: updatedProject.status,
+        teams: projectData.teams || [],
+        parts: projectData.parts || [],
+        activityLog: projectData.activityLog || []
+      };
+
+      dispatch({ type: 'UPDATE_PROJECT', payload: transformedProject });
+      
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: {
+          type: 'success',
+          message: 'Project updated successfully!'
+        }
+      });
+
+    } catch (error) {
+      console.error('Failed to update project:', error);
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: {
+          type: 'error',
+          message: 'Failed to update project. Please try again.'
+        }
+      });
+      throw error;
+    }
+  };
+
   const addProjectPart = async (projectId, partData) => {
     try {
       const newPart = await projectPartsService.createProjectPart(projectId, partData);
@@ -810,7 +858,7 @@ export const AppProvider = ({ children }) => {
     addNotification: (notification) => dispatch({ type: 'ADD_NOTIFICATION', payload: notification }),
     removeNotification: (id) => dispatch({ type: 'REMOVE_NOTIFICATION', payload: id }),
     addProject,
-    updateProject: (project) => dispatch({ type: 'UPDATE_PROJECT', payload: project }),
+    updateProject,
     deleteProject,
     addProjectPart,
     updateProjectPart: (projectId, partId, updates) => dispatch({ 

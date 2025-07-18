@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
@@ -14,29 +14,58 @@ import {
   Trash2,
   ChevronDown,
   ChevronRight,
-  X
+  X,
+  Save,
+  AlertCircle
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import LoadingSpinner from '../components/LoadingSpinner'
 
 const ProjectDetail = () => {
   const { id } = useParams()
+  const navigate = useNavigate()
   const { t } = useTranslation()
-  const { projects, teams, members, role, addProjectPart, addNotification } = useApp()
+  const { projects, teams, members, role, addProjectPart, addNotification, updateProject, deleteProject } = useApp()
+  
+  // State management
   const [selectedTeam, setSelectedTeam] = useState('')
   const [expandedParts, setExpandedParts] = useState(new Set())
   const [showAddPartModal, setShowAddPartModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
+  const [isUpdating, setIsUpdating] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     weight: '',
     progress: 0
   })
+  const [editFormData, setEditFormData] = useState({
+    name: '',
+    description: '',
+    manager: '',
+    deadline: '',
+    status: 'active'
+  })
   const [formErrors, setFormErrors] = useState({})
+  const [editFormErrors, setEditFormErrors] = useState({})
 
   const project = projects.find(p => p.id === id)
   
+  // Initialize edit form data when project is loaded
+  useEffect(() => {
+    if (project) {
+      setEditFormData({
+        name: project.name,
+        description: project.description || '',
+        manager: project.manager,
+        deadline: project.deadline,
+        status: project.status
+      })
+    }
+  }, [project])
+
   if (!project) {
     return (
       <div className="p-6 text-center">
@@ -57,18 +86,117 @@ const ProjectDetail = () => {
   const selectedTeamData = selectedTeam ? teams.find(team => team.id === selectedTeam) : null
   const selectedTeamMembers = selectedTeamData ? members.filter(member => member.teamId === selectedTeamData.id) : []
   
-  // Get team-specific tasks/parts
-  const getTeamTasks = (teamData) => {
-    if (!teamData) return []
-    const teamMembers = members.filter(member => member.teamId === teamData.id)
-    const teamTaskIds = teamMembers.flatMap(member => member.tasks || [])
-    return project.parts.filter(part => 
-      part.todos.some(todo => teamTaskIds.includes(todo.id))
-    )
-  }
-
   // Clamp progress for project and parts
   const clamp = (val) => Math.max(0, Math.min(100, val))
+
+  // Event handlers
+  const handleEditProject = () => {
+    setShowEditModal(true)
+  }
+
+  const handleDeleteProject = () => {
+    setShowDeleteModal(true)
+  }
+
+  const handleConfirmDelete = async () => {
+    try {
+      await deleteProject(id)
+      addNotification({
+        type: 'success',
+        title: 'Success',
+        message: 'Project deleted successfully'
+      })
+      navigate('/projects')
+    } catch (error) {
+      addNotification({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to delete project'
+      })
+    }
+    setShowDeleteModal(false)
+  }
+
+  const handleEditFormChange = (e) => {
+    const { name, value } = e.target
+    setEditFormData(prev => ({
+      ...prev,
+      [name]: value
+    }))
+    // Clear errors when user starts typing
+    if (editFormErrors[name]) {
+      setEditFormErrors(prev => ({
+        ...prev,
+        [name]: ''
+      }))
+    }
+  }
+
+  const validateEditForm = () => {
+    const errors = {}
+    
+    if (!editFormData.name.trim()) {
+      errors.name = 'Project name is required'
+    }
+    
+    if (!editFormData.manager.trim()) {
+      errors.manager = 'Manager name is required'
+    }
+    
+    if (!editFormData.deadline) {
+      errors.deadline = 'Deadline is required'
+    } else {
+      const selectedDate = new Date(editFormData.deadline)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      if (selectedDate <= today) {
+        errors.deadline = 'Deadline must be in the future'
+      }
+    }
+    
+    return errors
+  }
+
+  const handleUpdateProject = async (e) => {
+    e.preventDefault()
+    
+    const errors = validateEditForm()
+    if (Object.keys(errors).length > 0) {
+      setEditFormErrors(errors)
+      return
+    }
+
+    setIsUpdating(true)
+
+    try {
+      const updatedProject = {
+        ...project,
+        name: editFormData.name.trim(),
+        description: editFormData.description.trim(),
+        manager: editFormData.manager.trim(),
+        deadline: editFormData.deadline,
+        status: editFormData.status
+      }
+
+      await updateProject(updatedProject)
+      
+      addNotification({
+        type: 'success',
+        title: 'Success',
+        message: 'Project updated successfully'
+      })
+
+      setShowEditModal(false)
+    } catch (error) {
+      addNotification({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to update project'
+      })
+    } finally {
+      setIsUpdating(false)
+    }
+  }
 
   const togglePartExpansion = (partId) => {
     const newExpanded = new Set(expandedParts)
@@ -78,6 +206,15 @@ const ProjectDetail = () => {
       newExpanded.add(partId)
     }
     setExpandedParts(newExpanded)
+  }
+
+  const handleTodoToggle = (partId, todoId) => {
+    // This would typically update the todo status in the backend
+    addNotification({
+      type: 'info',
+      title: 'Todo Updated',
+      message: 'Todo status updated successfully'
+    })
   }
 
   const handleFormChange = (e) => {
@@ -124,27 +261,24 @@ const ProjectDetail = () => {
     }
 
     setIsCreating(true)
-    
+
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      const newPart = {
-        id: Date.now(),
-        name: formData.name,
-        description: formData.description,
+      const partData = {
+        name: formData.name.trim(),
+        description: formData.description.trim(),
         weight: parseFloat(formData.weight),
-        progress: parseFloat(formData.progress),
-        todos: []
+        progress: formData.progress
       }
+
+      await addProjectPart(project.id, partData)
       
-      addProjectPart(project.id, newPart)
       addNotification({
         type: 'success',
-        message: t('projects.partCreated')
+        title: t('notifications.success'),
+        message: t('notifications.partCreated')
       })
-      
-      // Reset form
+
+      // Reset form and close modal
       setFormData({
         name: '',
         description: '',
@@ -153,10 +287,10 @@ const ProjectDetail = () => {
       })
       setFormErrors({})
       setShowAddPartModal(false)
-      
     } catch (error) {
       addNotification({
         type: 'error',
+        title: t('notifications.error'),
         message: 'Failed to create part'
       })
     } finally {
@@ -207,11 +341,17 @@ const ProjectDetail = () => {
           </div>
           {(role === 'manager' || role === 'teamLead') && (
             <div className="flex items-center space-x-2">
-              <button className="btn-secondary flex items-center space-x-2">
+              <button 
+                onClick={handleEditProject}
+                className="btn-secondary flex items-center space-x-2"
+              >
                 <Edit className="w-4 h-4" />
                 <span>Edit</span>
               </button>
-              <button className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors">
+              <button 
+                onClick={handleDeleteProject}
+                className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+              >
                 <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
               </button>
             </div>
@@ -385,69 +525,6 @@ const ProjectDetail = () => {
           </motion.div>
         )}
 
-        {/* Show message when no team is selected */}
-        {!selectedTeamData && (
-          <motion.div variants={itemVariants} className="card text-center">
-            <div className="py-8">
-              <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                {t('projects.noTeamSelected')}
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400">
-                {t('projects.selectTeamToView')}
-              </p>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Timeline */}
-        <motion.div variants={itemVariants} className="card">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            {t('projects.timeline')}
-          </h3>
-          <div className="relative">
-            <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-700"></div>
-            <div className="space-y-4">
-              <div className="flex items-center space-x-4">
-                <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center">
-                  <span className="text-white text-sm font-medium">S</span>
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-gray-900 dark:text-white">Project Started</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">January 1, 2026</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-4">
-                <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center">
-                  <CheckCircle className="w-4 h-4 text-white" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-gray-900 dark:text-white">Planning Phase Complete</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">January 15, 2026</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-4">
-                <div className="w-8 h-8 bg-yellow-600 rounded-full flex items-center justify-center">
-                  <Clock className="w-4 h-4 text-white" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-gray-900 dark:text-white">Development in Progress</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Current</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-4">
-                <div className="w-8 h-8 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center">
-                  <span className="text-gray-600 dark:text-gray-400 text-sm font-medium">D</span>
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-gray-900 dark:text-white">Project Deadline</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">{new Date(project.deadline).toLocaleDateString()}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-
         {/* Project Parts */}
         <motion.div variants={itemVariants} className="card">
           <div className="flex items-center justify-between mb-4">
@@ -508,6 +585,7 @@ const ProjectDetail = () => {
                             <input
                               type="checkbox"
                               checked={todo.completed}
+                              onChange={() => handleTodoToggle(part.id, todo.id)}
                               className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
                             />
                             <span className={`text-sm ${todo.completed ? 'line-through text-gray-500' : 'text-gray-700 dark:text-gray-300'}`}>
@@ -543,6 +621,207 @@ const ProjectDetail = () => {
           </div>
         </motion.div>
       </motion.div>
+
+      {/* Edit Project Modal */}
+      <AnimatePresence>
+        {showEditModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4"
+            >
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Edit Project
+                </h3>
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateProject} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Project Name
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={editFormData.name}
+                    onChange={handleEditFormChange}
+                    className={`w-full p-3 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors ${
+                      editFormErrors.name ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                    }`}
+                    placeholder="Enter project name"
+                  />
+                  {editFormErrors.name && (
+                    <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                      {editFormErrors.name}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Description
+                  </label>
+                  <textarea
+                    name="description"
+                    value={editFormData.description}
+                    onChange={handleEditFormChange}
+                    rows={3}
+                    className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
+                    placeholder="Enter project description"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Manager
+                  </label>
+                  <input
+                    type="text"
+                    name="manager"
+                    value={editFormData.manager}
+                    onChange={handleEditFormChange}
+                    className={`w-full p-3 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors ${
+                      editFormErrors.manager ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                    }`}
+                    placeholder="Enter manager name"
+                  />
+                  {editFormErrors.manager && (
+                    <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                      {editFormErrors.manager}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Deadline
+                  </label>
+                  <input
+                    type="date"
+                    name="deadline"
+                    value={editFormData.deadline}
+                    onChange={handleEditFormChange}
+                    className={`w-full p-3 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors ${
+                      editFormErrors.deadline ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                    }`}
+                  />
+                  {editFormErrors.deadline && (
+                    <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                      {editFormErrors.deadline}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Status
+                  </label>
+                  <select
+                    name="status"
+                    value={editFormData.status}
+                    onChange={handleEditFormChange}
+                    className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors"
+                  >
+                    <option value="active">Active</option>
+                    <option value="completed">Completed</option>
+                    <option value="on-hold">On Hold</option>
+                  </select>
+                </div>
+
+                <div className="flex space-x-4 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditModal(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUpdating}
+                    className="flex-1 btn-primary flex items-center justify-center space-x-2"
+                  >
+                    {isUpdating ? (
+                      <>
+                        <LoadingSpinner size="sm" />
+                        <span>Updating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        <span>Update</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {showDeleteModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4"
+            >
+              <div className="p-6">
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                    <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    Delete Project
+                  </h3>
+                </div>
+                
+                <p className="text-gray-600 dark:text-gray-400 mb-6">
+                  Are you sure you want to delete "{project.name}"? This action cannot be undone.
+                </p>
+                
+                <div className="flex space-x-4">
+                  <button
+                    onClick={() => setShowDeleteModal(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleConfirmDelete}
+                    className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Add Part Modal */}
       <AnimatePresence>
