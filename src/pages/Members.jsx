@@ -77,7 +77,7 @@ const Members = () => {
         id: Math.max(...members.map(m => m.id), 0) + 1,
         name: formData.name.trim(),
         role: formData.role,
-        teamId: parseInt(formData.teamId) || null,
+        teamId: formData.teamId || null,
         tasks: [],
         personalTodos: [
           {

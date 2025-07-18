@@ -89,13 +89,10 @@ const Projects = () => {
     try {
       // Create new project with proper structure
       const newProject = {
-        id: Math.max(...projects.map(p => p.id), 0) + 1,
         name: formData.name.trim(),
         manager: formData.manager.trim(),
         deadline: formData.deadline,
         description: formData.description.trim() || `${formData.name} project`,
-        progress: 0,
-        status: 'active',
         teams: formData.selectedTeams,
         parts: [
           {
@@ -137,10 +134,7 @@ const Projects = () => {
         ]
       }
 
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000))
-
-      addProject(newProject)
+      await addProject(newProject)
       
       addNotification({
         type: 'success',

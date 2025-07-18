@@ -5,6 +5,7 @@ import {
   teamsService, 
   usersService, 
   projectPartsService,
+  tasks,
   subscriptions 
 } from '../services/supabase';
 
@@ -17,6 +18,7 @@ const initialState = {
   projects: [],
   teams: [],
   members: [],
+  tasks: [],
   selectedProject: null,
   selectedTeam: null,
   selectedMember: null,
@@ -175,6 +177,40 @@ const appReducer = (state, action) => {
             : m
         )
       };
+    case 'SET_TASKS':
+      return { ...state, tasks: action.payload };
+    case 'ADD_TASK':
+      return { ...state, tasks: [...state.tasks, action.payload] };
+    case 'UPDATE_TASK':
+      return { 
+        ...state, 
+        tasks: state.tasks.map(t => 
+          t.id === action.payload.id ? action.payload : t
+        ) 
+      };
+    case 'DELETE_TASK':
+      return { 
+        ...state, 
+        tasks: state.tasks.filter(t => t.id !== action.payload) 
+      };
+    case 'UPDATE_TASK_PROGRESS':
+      return { 
+        ...state, 
+        tasks: state.tasks.map(t => 
+          t.id === action.payload.id ? { ...t, progress: action.payload.progress } : t
+        ) 
+      };
+    case 'ASSIGN_TASK':
+      return { 
+        ...state, 
+        tasks: state.tasks.map(t => 
+          t.id === action.payload.id ? { 
+            ...t, 
+            assigned_to: action.payload.assigned_to,
+            assigned_by: action.payload.assigned_by
+          } : t
+        ) 
+      };
     default:
       return state;
   }
@@ -214,10 +250,11 @@ export const AppProvider = ({ children }) => {
       
       try {
         // Load all data in parallel
-        const [projects, teams, users] = await Promise.all([
+        const [projects, teams, users, taskData] = await Promise.all([
           projectsService.getProjects(),
           teamsService.getTeams(),
-          usersService.getUsers()
+          usersService.getUsers(),
+          tasks.getAll()
         ]);
 
         // Transform users data to match expected structure
@@ -234,13 +271,23 @@ export const AppProvider = ({ children }) => {
         dispatch({ type: 'SET_PROJECTS', payload: projects });
         dispatch({ type: 'SET_TEAMS', payload: teams });
         dispatch({ type: 'SET_MEMBERS', payload: transformedUsers });
+        dispatch({ type: 'SET_TASKS', payload: taskData });
         dispatch({ type: 'SET_CONNECTED', payload: true });
         
         console.log('✅ Data loaded successfully:', {
           projects: projects.length,
           teams: teams.length,
-          users: transformedUsers.length
+          users: transformedUsers.length,
+          tasks: taskData.length
         });
+        
+        // Log project details for debugging
+        console.log('📋 Loaded projects:', projects.map(p => ({
+          id: p.id,
+          name: p.name,
+          manager: p.manager,
+          managerId: p.managerId
+        })));
         
       } catch (error) {
         console.error('❌ Failed to load data:', error);
@@ -306,11 +353,22 @@ export const AppProvider = ({ children }) => {
       }
     });
 
+    const tasksSubscription = subscriptions.subscribeToTasks(async (payload) => {
+      console.log('🔄 Tasks updated:', payload);
+      try {
+        const taskData = await tasks.getAll();
+        dispatch({ type: 'SET_TASKS', payload: taskData });
+      } catch (error) {
+        console.error('Failed to refresh tasks:', error);
+      }
+    });
+
     // Cleanup subscriptions on unmount
     return () => {
       projectsSubscription.unsubscribe();
       teamsSubscription.unsubscribe();
       usersSubscription.unsubscribe();
+      tasksSubscription.unsubscribe();
     };
   }, [state.isConnected]);
 
@@ -319,20 +377,42 @@ export const AppProvider = ({ children }) => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
       
+      // Get current user as manager (fallback to first manager if not specified)
+      const currentUser = state.members.find(m => m.role === state.role);
+      const managerId = projectData.managerId || currentUser?.id || state.members.find(m => m.role === 'manager')?.id;
+      
+      console.log('🔄 Creating project:', {
+        projectData,
+        currentUser,
+        managerId,
+        role: state.role,
+        membersCount: state.members.length
+      });
+      
+      if (!managerId) {
+        throw new Error('No manager found to assign to project');
+      }
+      
       // Create project in database
       const newProject = await projectsService.createProject({
         name: projectData.name,
         description: projectData.description,
-        managerId: projectData.managerId,
+        managerId: managerId,
         deadline: projectData.deadline
       });
+      
+      console.log('✅ Project created in database:', newProject);
 
+      // Get manager name for display
+      const manager = state.members.find(m => m.id === managerId);
+      
       // Transform and add to state
       const transformedProject = {
         id: newProject.id,
         name: newProject.name,
         description: newProject.description,
-        manager: projectData.manager,
+        manager: manager?.name || projectData.manager || 'Unknown',
+        managerId: managerId,
         deadline: newProject.deadline,
         progress: 0,
         status: 'active',
@@ -477,6 +557,121 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  // Task management functions
+  const createTask = async (taskData) => {
+    try {
+      const newTask = await tasks.create(taskData);
+      dispatch({ type: 'ADD_TASK', payload: newTask });
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: { type: 'success', message: 'Task created successfully' } 
+      });
+      return newTask;
+    } catch (error) {
+      console.error('Failed to create task:', error);
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: { type: 'error', message: 'Failed to create task' } 
+      });
+      throw error;
+    }
+  };
+
+  const updateTask = async (taskId, updates) => {
+    try {
+      const updatedTask = await tasks.update(taskId, updates);
+      dispatch({ type: 'UPDATE_TASK', payload: updatedTask });
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: { type: 'success', message: 'Task updated successfully' } 
+      });
+      return updatedTask;
+    } catch (error) {
+      console.error('Failed to update task:', error);
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: { type: 'error', message: 'Failed to update task' } 
+      });
+      throw error;
+    }
+  };
+
+  const updateTaskProgress = async (taskId, progress) => {
+    try {
+      const currentUser = state.members.find(m => m.role === state.role);
+      const updatedTask = await tasks.updateProgress(taskId, progress, currentUser?.id);
+      dispatch({ type: 'UPDATE_TASK', payload: updatedTask });
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: { type: 'success', message: 'Task progress updated successfully' } 
+      });
+      return updatedTask;
+    } catch (error) {
+      console.error('Failed to update task progress:', error);
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: { type: 'error', message: 'Failed to update task progress' } 
+      });
+      throw error;
+    }
+  };
+
+  const assignTask = async (taskId, assignedTo) => {
+    try {
+      const currentUser = state.members.find(m => m.role === state.role);
+      const updatedTask = await tasks.assign(taskId, assignedTo, currentUser?.id);
+      dispatch({ type: 'UPDATE_TASK', payload: updatedTask });
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: { type: 'success', message: 'Task assigned successfully' } 
+      });
+      return updatedTask;
+    } catch (error) {
+      console.error('Failed to assign task:', error);
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: { type: 'error', message: 'Failed to assign task' } 
+      });
+      throw error;
+    }
+  };
+
+  const deleteTask = async (taskId) => {
+    try {
+      await tasks.delete(taskId);
+      dispatch({ type: 'DELETE_TASK', payload: taskId });
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: { type: 'success', message: 'Task deleted successfully' } 
+      });
+    } catch (error) {
+      console.error('Failed to delete task:', error);
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: { type: 'error', message: 'Failed to delete task' } 
+      });
+      throw error;
+    }
+  };
+
+  const getUserTasks = async (userId) => {
+    try {
+      return await tasks.getUserTasks(userId);
+    } catch (error) {
+      console.error('Failed to get user tasks:', error);
+      throw error;
+    }
+  };
+
+  const getTeamTasks = async (teamId) => {
+    try {
+      return await tasks.getTeamTasks(teamId);
+    } catch (error) {
+      console.error('Failed to get team tasks:', error);
+      throw error;
+    }
+  };
+
   const value = {
     ...state,
     dispatch,
@@ -514,7 +709,15 @@ export const AppProvider = ({ children }) => {
     deletePersonalTodo: (memberId, todoId) => dispatch({ 
       type: 'DELETE_PERSONAL_TODO', 
       payload: { memberId, todoId } 
-    })
+    }),
+    // Task management functions
+    createTask,
+    updateTask,
+    updateTaskProgress,
+    assignTask,
+    deleteTask,
+    getUserTasks,
+    getTeamTasks
   };
 
   return (

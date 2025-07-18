@@ -21,7 +21,7 @@ const TeamDetail = () => {
   const { teams, members, projects, role } = useApp()
   const [selectedMember, setSelectedMember] = useState('')
 
-  const team = teams.find(t => t.id === parseInt(id))
+  const team = teams.find(t => t.id === id)
   
   if (!team) {
     return (
@@ -194,7 +194,7 @@ const TeamDetail = () => {
             {selectedMember && (
               <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Member selected: {teamMembers.find(m => m.id === parseInt(selectedMember))?.name}
+                                        Member selected: {teamMembers.find(m => m.id === selectedMember)?.name}
                 </p>
               </div>
             )}

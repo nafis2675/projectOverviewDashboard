@@ -44,7 +44,7 @@ const MemberDetail = () => {
   })
   const [formErrors, setFormErrors] = useState({})
 
-  const member = members.find(m => m.id === parseInt(id))
+  const member = members.find(m => m.id === id)
   
   if (!member) {
     return (
@@ -103,7 +103,7 @@ const MemberDetail = () => {
         ...member,
         name: formData.name.trim(),
         role: formData.role,
-        teamId: parseInt(formData.teamId) || null
+        teamId: formData.teamId || null
       }
 
       // Simulate API call delay

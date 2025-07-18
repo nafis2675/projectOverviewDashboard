@@ -35,7 +35,7 @@ const ProjectDetail = () => {
   })
   const [formErrors, setFormErrors] = useState({})
 
-  const project = projects.find(p => p.id === parseInt(id))
+  const project = projects.find(p => p.id === id)
   
   if (!project) {
     return (
@@ -54,7 +54,7 @@ const ProjectDetail = () => {
   const daysUntilDeadline = Math.ceil((new Date(project.deadline) - new Date()) / (1000 * 60 * 60 * 24))
 
   // Get selected team details
-  const selectedTeamData = selectedTeam ? teams.find(team => team.id === parseInt(selectedTeam)) : null
+  const selectedTeamData = selectedTeam ? teams.find(team => team.id === selectedTeam) : null
   const selectedTeamMembers = selectedTeamData ? members.filter(member => member.teamId === selectedTeamData.id) : []
   
   // Get team-specific tasks/parts

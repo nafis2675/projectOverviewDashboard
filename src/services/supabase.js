@@ -59,7 +59,7 @@ export const projectsService = {
       .select(`
         *,
         manager:users!projects_manager_id_fkey(*),
-        project_teams!inner(
+        project_teams(
           team:teams(
             *,
             lead:users!teams_lead_id_fkey(*),
@@ -83,6 +83,7 @@ export const projectsService = {
       name: project.name,
       description: project.description,
       manager: project.manager?.name || 'Unknown',
+      managerId: project.manager_id,
       deadline: project.deadline,
       progress: project.progress,
       status: project.status,
@@ -307,6 +308,233 @@ export const teamMembersService = {
   }
 }
 
+// Task Management
+export const tasks = {
+  async getAll() {
+    const { data, error } = await supabase
+      .from('tasks')
+      .select(`
+        *,
+        assigned_to_user:users!assigned_to(id, name, email, role),
+        assigned_by_user:users!assigned_by(id, name, email, role),
+        project:projects(id, name),
+        project_part:project_parts(id, name)
+      `)
+      .order('created_at', { ascending: false })
+    
+    if (error) throw error
+    return data
+  },
+
+  async getById(id) {
+    const { data, error } = await supabase
+      .from('tasks')
+      .select(`
+        *,
+        assigned_to_user:users!assigned_to(id, name, email, role),
+        assigned_by_user:users!assigned_by(id, name, email, role),
+        project:projects(id, name),
+        project_part:project_parts(id, name)
+      `)
+      .eq('id', id)
+      .single()
+    
+    if (error) throw error
+    return data
+  },
+
+  async create(task) {
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert([task])
+      .select()
+      .single()
+    
+    if (error) throw error
+    
+    // Create task history entry
+    await supabase
+      .from('task_history')
+      .insert([{
+        task_id: data.id,
+        user_id: task.assigned_by,
+        action: 'created',
+        new_value: 'Task created'
+      }])
+    
+    return data
+  },
+
+  async update(id, updates) {
+    const { data, error } = await supabase
+      .from('tasks')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+    
+    if (error) throw error
+    return data
+  },
+
+  async updateProgress(id, progress, userId) {
+    const { data: oldTask } = await supabase
+      .from('tasks')
+      .select('progress')
+      .eq('id', id)
+      .single()
+    
+    const { data, error } = await supabase
+      .from('tasks')
+      .update({ progress, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single()
+    
+    if (error) throw error
+    
+    // Create task history entry
+    await supabase
+      .from('task_history')
+      .insert([{
+        task_id: id,
+        user_id: userId,
+        action: 'progress_updated',
+        old_value: oldTask?.progress?.toString() || '0',
+        new_value: progress.toString()
+      }])
+    
+    return data
+  },
+
+  async assign(taskId, assignedTo, assignedBy) {
+    const { data, error } = await supabase
+      .from('tasks')
+      .update({ 
+        assigned_to: assignedTo,
+        assigned_by: assignedBy,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', taskId)
+      .select()
+      .single()
+    
+    if (error) throw error
+    
+    // Create task history entry
+    await supabase
+      .from('task_history')
+      .insert([{
+        task_id: taskId,
+        user_id: assignedBy,
+        action: 'assigned',
+        new_value: `Task assigned to ${assignedTo}`
+      }])
+    
+    return data
+  },
+
+  async delete(id) {
+    const { error } = await supabase
+      .from('tasks')
+      .delete()
+      .eq('id', id)
+    
+    if (error) throw error
+    return true
+  },
+
+  async getComments(taskId) {
+    const { data, error } = await supabase
+      .from('task_comments')
+      .select(`
+        *,
+        user:users(id, name, email, role)
+      `)
+      .eq('task_id', taskId)
+      .order('created_at', { ascending: true })
+    
+    if (error) throw error
+    return data
+  },
+
+  async addComment(taskId, userId, comment) {
+    const { data, error } = await supabase
+      .from('task_comments')
+      .insert([{
+        task_id: taskId,
+        user_id: userId,
+        comment
+      }])
+      .select(`
+        *,
+        user:users(id, name, email, role)
+      `)
+      .single()
+    
+    if (error) throw error
+    return data
+  },
+
+  async getHistory(taskId) {
+    const { data, error } = await supabase
+      .from('task_history')
+      .select(`
+        *,
+        user:users(id, name, email, role)
+      `)
+      .eq('task_id', taskId)
+      .order('created_at', { ascending: false })
+    
+    if (error) throw error
+    return data
+  },
+
+  async getUserTasks(userId) {
+    const { data, error } = await supabase
+      .from('tasks')
+      .select(`
+        *,
+        assigned_to_user:users!assigned_to(id, name, email, role),
+        assigned_by_user:users!assigned_by(id, name, email, role),
+        project:projects(id, name),
+        project_part:project_parts(id, name)
+      `)
+      .eq('assigned_to', userId)
+      .order('deadline', { ascending: true })
+    
+    if (error) throw error
+    return data
+  },
+
+  async getTeamTasks(teamId) {
+    // Get team members first
+    const { data: teamMembers } = await supabase
+      .from('team_members')
+      .select('user_id')
+      .eq('team_id', teamId)
+    
+    if (!teamMembers || teamMembers.length === 0) return []
+    
+    const userIds = teamMembers.map(tm => tm.user_id)
+    
+    const { data, error } = await supabase
+      .from('tasks')
+      .select(`
+        *,
+        assigned_to_user:users!assigned_to(id, name, email, role),
+        assigned_by_user:users!assigned_by(id, name, email, role),
+        project:projects(id, name),
+        project_part:project_parts(id, name)
+      `)
+      .in('assigned_to', userIds)
+      .order('deadline', { ascending: true })
+    
+    if (error) throw error
+    return data
+  }
+}
+
 // Real-time subscriptions
 export const subscriptions = {
   subscribeToProjects(callback) {
@@ -334,6 +562,16 @@ export const subscriptions = {
       .channel('users')
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'users' }, 
+        callback
+      )
+      .subscribe()
+  },
+
+  subscribeToTasks(callback) {
+    return supabase
+      .channel('tasks')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'tasks' }, 
         callback
       )
       .subscribe()

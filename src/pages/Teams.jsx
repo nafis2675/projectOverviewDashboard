@@ -89,7 +89,7 @@ const Teams = () => {
         name: formData.name.trim(),
         lead: formData.lead.trim(),
         deadline: formData.deadline,
-        projectId: parseInt(formData.projectId) || null,
+        projectId: formData.projectId || null,
         members: formData.selectedMembers,
         progress: 0
       }
