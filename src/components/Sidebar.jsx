@@ -15,8 +15,18 @@ import { useApp } from '../context/AppContext'
 
 const Sidebar = () => {
   const { t } = useTranslation()
-  const { role } = useApp()
+  const { role, projects, teams } = useApp()
   const location = useLocation()
+  
+  // Calculate quick stats
+  const activeProjects = projects.filter(p => p.status === 'active').length
+  const dueSoonProjects = projects.filter(p => {
+    const deadline = new Date(p.deadline)
+    const today = new Date()
+    const timeDiff = deadline - today
+    const daysDiff = Math.ceil(timeDiff / (1000 * 60 * 60 * 24))
+    return daysDiff <= 7 && daysDiff > 0
+  }).length
 
   const navigation = [
     {
@@ -104,7 +114,7 @@ const Sidebar = () => {
                 </span>
               </div>
               <span className="text-sm font-medium text-gray-900 dark:text-white">
-                2
+                {activeProjects}
               </span>
             </div>
             <div className="flex items-center justify-between">
@@ -115,7 +125,7 @@ const Sidebar = () => {
                 </span>
               </div>
               <span className="text-sm font-medium text-gray-900 dark:text-white">
-                1
+                {dueSoonProjects}
               </span>
             </div>
           </div>

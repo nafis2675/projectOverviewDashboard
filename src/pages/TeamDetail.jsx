@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { 
   ArrowLeft, 
   User, 
@@ -11,15 +11,19 @@ import {
   Clock,
   Plus,
   Edit,
-  Trash2
+  Trash2,
+  X
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 
 const TeamDetail = () => {
   const { id } = useParams()
   const { t } = useTranslation()
-  const { teams, members, projects, role } = useApp()
+  const { teams, members, projects, role, addNotification } = useApp()
   const [selectedMember, setSelectedMember] = useState('')
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false)
+  const [availableMembers, setAvailableMembers] = useState([])
+  const [selectedNewMember, setSelectedNewMember] = useState('')
 
   const team = teams.find(t => t.id === id)
   
@@ -39,6 +43,27 @@ const TeamDetail = () => {
   const teamMembers = members.filter(member => team.members.includes(member.id))
   const teamProject = projects.find(p => p.id === team.projectId)
   const daysUntilDeadline = Math.ceil((new Date(team.deadline) - new Date()) / (1000 * 60 * 60 * 24))
+  
+  // Calculate available members (not already in team)
+  React.useEffect(() => {
+    const available = members.filter(member => !team.members.includes(member.id))
+    setAvailableMembers(available)
+  }, [members, team.members])
+  
+  const handleAddMember = () => {
+    if (selectedNewMember && selectedNewMember !== '') {
+      // Here you would normally call an API to add the member to the team
+      // For now, we'll just show a notification
+      addNotification({
+        type: 'success',
+        title: 'Member Added',
+        message: `Member has been added to ${team.name}`
+      })
+      setShowAddMemberModal(false)
+      setSelectedNewMember('')
+      // In a real app, you would update the team in the backend and refresh the data
+    }
+  }
 
   const clamp = (val) => Math.max(0, Math.min(100, val))
 
@@ -208,7 +233,10 @@ const TeamDetail = () => {
               Team Members
             </h3>
             {role === 'manager' && (
-              <button className="btn-primary flex items-center space-x-2">
+              <button 
+                onClick={() => setShowAddMemberModal(true)}
+                className="btn-primary flex items-center space-x-2"
+              >
                 <Plus className="w-4 h-4" />
                 <span>Add Member</span>
               </button>
@@ -248,6 +276,83 @@ const TeamDetail = () => {
           </div>
         </motion.div>
       </motion.div>
+      
+      {/* Add Member Modal */}
+      <AnimatePresence>
+        {showAddMemberModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+            onClick={(e) => e.target === e.currentTarget && setShowAddMemberModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                  Add Member to {team.name}
+                </h2>
+                <button
+                  onClick={() => setShowAddMemberModal(false)}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+              
+              <div className="p-6">
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Select Member
+                    </label>
+                    <select
+                      value={selectedNewMember}
+                      onChange={(e) => setSelectedNewMember(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    >
+                      <option value="">Choose a member...</option>
+                      {availableMembers.map((member) => (
+                        <option key={member.id} value={member.id}>
+                          {member.name} ({member.role})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  {availableMembers.length === 0 && (
+                    <p className="text-gray-500 dark:text-gray-400 text-sm">
+                      No available members to add to this team.
+                    </p>
+                  )}
+                </div>
+                
+                <div className="flex items-center justify-end space-x-3 mt-6">
+                  <button
+                    onClick={() => setShowAddMemberModal(false)}
+                    className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAddMember}
+                    disabled={!selectedNewMember || selectedNewMember === ''}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                  >
+                    Add Member
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

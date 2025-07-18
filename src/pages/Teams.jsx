@@ -23,7 +23,10 @@ const Teams = () => {
   const { teams, members, projects, role, addNotification, deleteTeam, addTeam } = useApp()
   const [searchTerm, setSearchTerm] = useState('')
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingTeam, setEditingTeam] = useState(null)
   const [isCreating, setIsCreating] = useState(false)
+  const [isUpdating, setIsUpdating] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     lead: '',
@@ -45,6 +48,61 @@ const Teams = () => {
       title: t('notifications.success'),
       message: t('notifications.teamDeleted')
     })
+  }
+
+  const handleEditTeam = (team) => {
+    setEditingTeam(team)
+    setFormData({
+      name: team.name,
+      lead: team.lead,
+      deadline: team.deadline,
+      projectId: team.projectId || '',
+      selectedMembers: team.members || []
+    })
+    setFormErrors({})
+    setShowEditModal(true)
+  }
+
+  const handleUpdateTeam = async (e) => {
+    e.preventDefault()
+    
+    if (!validateForm()) {
+      return
+    }
+
+    setIsUpdating(true)
+
+    try {
+      const updatedTeam = {
+        ...editingTeam,
+        name: formData.name.trim(),
+        lead: formData.lead.trim(),
+        deadline: formData.deadline,
+        projectId: formData.projectId || null,
+        members: formData.selectedMembers
+      }
+
+      // Simulate API call delay
+      await new Promise(resolve => setTimeout(resolve, 1000))
+
+      // Here you would call updateTeam function from context
+      addNotification({
+        type: 'success',
+        title: t('notifications.success'),
+        message: t('notifications.teamUpdated')
+      })
+
+      setShowEditModal(false)
+      setEditingTeam(null)
+    } catch (error) {
+      addNotification({
+        type: 'error',
+        title: t('notifications.error'),
+        message: 'Failed to update team. Please try again.'
+      })
+    } finally {
+      setIsUpdating(false)
+    }
   }
 
   const validateForm = () => {
@@ -281,7 +339,10 @@ const Teams = () => {
                 </Link>
                 {(role === 'manager' || role === 'teamLead') && (
                   <>
-                    <button className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                    <button 
+                      onClick={() => alert('Edit functionality coming soon!')}
+                      className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                    >
                       <Edit className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                     </button>
                     <button 

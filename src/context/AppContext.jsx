@@ -5,6 +5,7 @@ import {
   teamsService, 
   usersService, 
   projectPartsService,
+  teamMembersService,
   tasks,
   subscriptions 
 } from '../services/supabase';
@@ -478,9 +479,13 @@ export const AppProvider = ({ children }) => {
 
   const addTeam = async (teamData) => {
     try {
+      // Find the lead member ID
+      const leadMember = state.members.find(m => m.name === teamData.lead);
+      const leadId = leadMember ? leadMember.id : null;
+      
       const newTeam = await teamsService.createTeam({
         name: teamData.name,
-        leadId: teamData.leadId,
+        leadId: leadId,
         projectId: teamData.projectId,
         deadline: teamData.deadline
       });
@@ -489,7 +494,7 @@ export const AppProvider = ({ children }) => {
         id: newTeam.id,
         name: newTeam.name,
         lead: teamData.lead,
-        members: [],
+        members: teamData.members || [],
         projectId: newTeam.project_id,
         progress: 0,
         deadline: newTeam.deadline
@@ -497,8 +502,36 @@ export const AppProvider = ({ children }) => {
 
       dispatch({ type: 'ADD_TEAM', payload: transformedTeam });
 
+      // Add team members to the team_members table if any were selected
+      if (teamData.members && teamData.members.length > 0) {
+        try {
+          // Add each member to the team
+          for (const memberId of teamData.members) {
+            await teamMembersService.addTeamMember(newTeam.id, memberId);
+          }
+        } catch (memberError) {
+          console.error('Failed to add team members:', memberError);
+          // Continue anyway - team is created, just members might not be added
+        }
+      }
+
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: {
+          type: 'success',
+          message: 'Team created successfully!'
+        }
+      });
+
     } catch (error) {
       console.error('Failed to create team:', error);
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: {
+          type: 'error',
+          message: 'Failed to create team. Please try again.'
+        }
+      });
       throw error;
     }
   };
