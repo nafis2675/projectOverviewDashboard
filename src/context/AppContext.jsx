@@ -6,6 +6,8 @@ import {
   usersService, 
   projectPartsService,
   teamMembersService,
+  projectTeamsService,
+  todosService,
   tasks,
   subscriptions 
 } from '../services/supabase';
@@ -417,7 +419,7 @@ export const AppProvider = ({ children }) => {
         deadline: newProject.deadline,
         progress: 0,
         status: 'active',
-        teams: [],
+        teams: projectData.teams || [],
         parts: projectData.parts || [],
         activityLog: []
       };
@@ -428,6 +430,13 @@ export const AppProvider = ({ children }) => {
       if (projectData.parts && projectData.parts.length > 0) {
         for (const part of projectData.parts) {
           await projectPartsService.createProjectPart(newProject.id, part);
+        }
+      }
+
+      // Save selected teams to project_teams table
+      if (projectData.teams && projectData.teams.length > 0) {
+        for (const teamId of projectData.teams) {
+          await projectTeamsService.addProjectTeam(newProject.id, teamId);
         }
       }
 

@@ -308,6 +308,49 @@ export const teamMembersService = {
   }
 }
 
+// Project Teams API - for managing project-team associations
+export const projectTeamsService = {
+  async addProjectTeam(projectId, teamId) {
+    const { data, error } = await supabase
+      .from('project_teams')
+      .insert([{ project_id: projectId, team_id: teamId }])
+      .select()
+      .single()
+    
+    if (error) throw error
+    return data
+  },
+
+  async removeProjectTeam(projectId, teamId) {
+    const { error } = await supabase
+      .from('project_teams')
+      .delete()
+      .eq('project_id', projectId)
+      .eq('team_id', teamId)
+    
+    if (error) throw error
+  },
+
+  async getProjectTeams(projectId) {
+    const { data, error } = await supabase
+      .from('project_teams')
+      .select(`
+        *,
+        team:teams(
+          *,
+          lead:users!teams_lead_id_fkey(*),
+          team_members(
+            user:users(*)
+          )
+        )
+      `)
+      .eq('project_id', projectId)
+    
+    if (error) throw error
+    return data
+  }
+}
+
 // Task Management
 export const tasks = {
   async getAll() {
