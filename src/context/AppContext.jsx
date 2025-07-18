@@ -654,6 +654,102 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  const deleteProject = async (id) => {
+    try {
+      await projectsService.deleteProject(id);
+      dispatch({ type: 'DELETE_PROJECT', payload: id });
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: { type: 'success', message: 'Project deleted successfully' } 
+      });
+    } catch (error) {
+      console.error('Failed to delete project:', error);
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: { type: 'error', message: 'Failed to delete project' } 
+      });
+      throw error;
+    }
+  };
+
+  const deleteTeam = async (id) => {
+    try {
+      await teamsService.deleteTeam(id);
+      dispatch({ type: 'DELETE_TEAM', payload: id });
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: { type: 'success', message: 'Team deleted successfully' } 
+      });
+    } catch (error) {
+      console.error('Failed to delete team:', error);
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: { type: 'error', message: 'Failed to delete team' } 
+      });
+      throw error;
+    }
+  };
+
+  const deleteMember = async (id) => {
+    try {
+      await usersService.deleteUser(id);
+      dispatch({ type: 'DELETE_MEMBER', payload: id });
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: { type: 'success', message: 'Member deleted successfully' } 
+      });
+    } catch (error) {
+      console.error('Failed to delete member:', error);
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: { type: 'error', message: 'Failed to delete member' } 
+      });
+      throw error;
+    }
+  };
+
+  const deleteProjectPart = async (projectId, partId) => {
+    try {
+      await projectPartsService.deleteProjectPart(partId);
+      dispatch({ 
+        type: 'DELETE_PROJECT_PART', 
+        payload: { projectId, partId } 
+      });
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: { type: 'success', message: 'Project part deleted successfully' } 
+      });
+    } catch (error) {
+      console.error('Failed to delete project part:', error);
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: { type: 'error', message: 'Failed to delete project part' } 
+      });
+      throw error;
+    }
+  };
+
+  const deletePersonalTodo = async (memberId, todoId) => {
+    try {
+      await todosService.deleteTodo(todoId);
+      dispatch({ 
+        type: 'DELETE_PERSONAL_TODO', 
+        payload: { memberId, todoId } 
+      });
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: { type: 'success', message: 'Personal todo deleted successfully' } 
+      });
+    } catch (error) {
+      console.error('Failed to delete personal todo:', error);
+      dispatch({ 
+        type: 'ADD_NOTIFICATION', 
+        payload: { type: 'error', message: 'Failed to delete personal todo' } 
+      });
+      throw error;
+    }
+  };
+
   const getUserTasks = async (userId) => {
     try {
       return await tasks.getUserTasks(userId);
@@ -682,22 +778,19 @@ export const AppProvider = ({ children }) => {
     removeNotification: (id) => dispatch({ type: 'REMOVE_NOTIFICATION', payload: id }),
     addProject,
     updateProject: (project) => dispatch({ type: 'UPDATE_PROJECT', payload: project }),
-    deleteProject: (id) => dispatch({ type: 'DELETE_PROJECT', payload: id }),
+    deleteProject,
     addProjectPart,
     updateProjectPart: (projectId, partId, updates) => dispatch({ 
       type: 'UPDATE_PROJECT_PART', 
       payload: { projectId, partId, updates } 
     }),
-    deleteProjectPart: (projectId, partId) => dispatch({ 
-      type: 'DELETE_PROJECT_PART', 
-      payload: { projectId, partId } 
-    }),
+    deleteProjectPart,
     addTeam,
     updateTeam: (team) => dispatch({ type: 'UPDATE_TEAM', payload: team }),
-    deleteTeam: (id) => dispatch({ type: 'DELETE_TEAM', payload: id }),
+    deleteTeam,
     addMember,
     updateMember,
-    deleteMember: (id) => dispatch({ type: 'DELETE_MEMBER', payload: id }),
+    deleteMember,
     addPersonalTodo: (memberId, todo) => dispatch({ 
       type: 'ADD_PERSONAL_TODO', 
       payload: { memberId, todo } 
@@ -706,10 +799,7 @@ export const AppProvider = ({ children }) => {
       type: 'UPDATE_PERSONAL_TODO', 
       payload: { memberId, todoId, updates } 
     }),
-    deletePersonalTodo: (memberId, todoId) => dispatch({ 
-      type: 'DELETE_PERSONAL_TODO', 
-      payload: { memberId, todoId } 
-    }),
+    deletePersonalTodo,
     // Task management functions
     createTask,
     updateTask,
